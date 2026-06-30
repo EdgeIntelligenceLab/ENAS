@@ -1,0 +1,8 @@
+# STM32L010RBT6 — Ultra-constrained Cortex-M0+ microcontroller
+name:        STM32L010RBT6
+ram_bytes:   20480
+flash_bytes: 131072
+macc_limit:  750000
+tier:        ultra_constrained
+family:      STM32L0
+clock_mhz:   32

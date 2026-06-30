@@ -1,0 +1,8 @@
+# NUCLEO-L412KB — STM32L412 Cortex-M4F development board
+name:        NUCLEO-L412KB
+ram_bytes:   65536
+flash_bytes: 131072
+macc_limit:  3200000
+tier:        moderate
+family:      STM32L4
+clock_mhz:   80

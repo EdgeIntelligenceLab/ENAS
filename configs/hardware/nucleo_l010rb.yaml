@@ -1,0 +1,8 @@
+# NUCLEO-L010RB — STM32L010 development board (tighter Flash variant)
+name:        NUCLEO-L010RB
+ram_bytes:   20480
+flash_bytes: 65536
+macc_limit:  750000
+tier:        ultra_constrained
+family:      STM32L0
+clock_mhz:   32

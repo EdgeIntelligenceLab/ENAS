@@ -1,0 +1,85 @@
+# ── Hardware constraint registry ──────────────────────────────────────────────
+# Centralised hardware specifications used across all experiments.
+# All values are vendor-published; sources noted in docs/hardware_specs.md
+# ─────────────────────────────────────────────────────────────────────────────
+
+STM32L010RBT6:
+  ram_bytes:     20480       # 20 KB
+  flash_bytes:   131072      # 128 KB
+  macc_limit:    750000      # 750 K MACs
+  tier:          ultra_constrained
+  family:        STM32L0
+  notes:         Cortex-M0+ @ 32 MHz
+
+NUCLEO-L010RB:
+  ram_bytes:     20480       # 20 KB
+  flash_bytes:   65536       # 64 KB (development board variant)
+  macc_limit:    750000
+  tier:          ultra_constrained
+  family:        STM32L0
+  notes:         Tighter flash than STM32L010RBT6
+
+ArduinoNano33IoT:
+  ram_bytes:     32768       # 32 KB
+  flash_bytes:   262144      # 256 KB
+  macc_limit:    1200000
+  tier:          constrained
+  family:        SAMD21
+  notes:         Cortex-M0+ @ 48 MHz
+
+NUCLEO-L412KB:
+  ram_bytes:     65536       # 64 KB
+  flash_bytes:   131072      # 128 KB
+  macc_limit:    3200000
+  tier:          moderate
+  family:        STM32L4
+  notes:         Cortex-M4F @ 80 MHz
+
+RaspberryPiPico:
+  ram_bytes:     264000      # 264 KB
+  flash_bytes:   2097152     # 2 MB
+  macc_limit:    3000000
+  tier:          moderate
+  family:        RP2040
+  notes:         Dual Cortex-M0+ @ 133 MHz, MACC-bound device
+
+ArduinoNano33BLE:
+  ram_bytes:     262144      # 256 KB
+  flash_bytes:   1048576     # 1 MB
+  macc_limit:    4000000
+  tier:          capable
+  family:        nRF52840
+  notes:         Cortex-M4F @ 64 MHz
+
+ArduinoNiclaVision:
+  ram_bytes:     1048576     # 1 MB (per paper Table 2)
+  flash_bytes:   2097152     # 2 MB
+  macc_limit:    8000000
+  tier:          high_capability
+  family:        STM32H7 dual-core
+  notes:         Cortex-M7 + Cortex-M4 dual core
+
+STM32H743ZI:
+  ram_bytes:     1048576     # 1 MB
+  flash_bytes:   2097152     # 2 MB
+  macc_limit:    15000000
+  tier:          high_capability
+  family:        STM32H7
+  notes:         Cortex-M7 @ 480 MHz
+
+# ── Extended hardware (for transfer evaluation; not in main paper table) ─────
+RaspberryPi5:
+  ram_bytes:     8589934592   # 8 GB
+  flash_bytes:   34359738368  # 32 GB SD typical
+  macc_limit:    100000000
+  tier:          edge_sbc
+  family:        BCM2712
+  notes:         Cortex-A76, included for transfer studies
+
+JetsonNano:
+  ram_bytes:     4294967296   # 4 GB
+  flash_bytes:   17179869184  # 16 GB
+  macc_limit:    500000000
+  tier:          edge_gpu
+  family:        Maxwell GPU + Cortex-A57
+  notes:         Included for transfer studies (GPU acceleration)

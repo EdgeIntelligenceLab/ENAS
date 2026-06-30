@@ -1,0 +1,26 @@
+# Visual Wake Words (VWW) dataset configuration
+name: vww
+
+# ── Paths (relative to repository root; override via CLI if needed) ───────
+paths:
+  train: datasets/vww/train
+  val:   datasets/vww/val
+  test:  datasets/vww/test
+  raw_coco: datasets/coco/                # used by generate_vww_dataset.py
+
+# ── Dataset properties ────────────────────────────────────────────────────
+num_classes: 2
+class_names: [not_person, person]
+
+# ── Preprocessing ─────────────────────────────────────────────────────────
+preprocessing:
+  resize_modes: [bilinear]
+  color_mode:   rgb
+  val_split:    0.12
+  test_size_per_class: 1500             # ~3000 total test images
+
+# ── Generation source ─────────────────────────────────────────────────────
+source:
+  base_dataset:    coco_2014
+  derivation:      person_bbox_area_threshold
+  min_bbox_ratio:  0.005                # MLPerf Tiny VWW definition
