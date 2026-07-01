@@ -1,3 +1,0 @@
-pycocotools
-Pillow
-tqdm

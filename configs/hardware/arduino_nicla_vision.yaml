@@ -1,8 +1,0 @@
-# Arduino Nicla Vision — STM32H747 dual Cortex-M7 + M4
-name:        ArduinoNiclaVision
-ram_bytes:   1048576       # 1 MB (per paper Table 2)
-flash_bytes: 2097152       # 2 MB
-macc_limit:  8000000       # 8 M
-tier:        high_capability
-family:      STM32H7
-clock_mhz:   480

@@ -1,8 +1,0 @@
-# NVIDIA Jetson Nano — Maxwell GPU + Cortex-A57 (transfer evaluation only)
-name:        JetsonNano
-ram_bytes:   4294967296
-flash_bytes: 17179869184
-macc_limit:  500000000
-tier:        edge_gpu
-family:      Jetson_Maxwell
-clock_mhz:   1430

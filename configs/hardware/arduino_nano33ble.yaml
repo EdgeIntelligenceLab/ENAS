@@ -1,8 +1,0 @@
-# Arduino Nano 33 BLE — nRF52840 Cortex-M4F
-name:        ArduinoNano33BLE
-ram_bytes:   262144
-flash_bytes: 1048576
-macc_limit:  4000000
-tier:        capable
-family:      nRF52840
-clock_mhz:   64
