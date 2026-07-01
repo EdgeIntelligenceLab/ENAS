@@ -2,9 +2,9 @@
 name: melanoma
 
 paths:
-  train: datasets/melanoma/train
+  train: dataset/melanoma_cancer_dataset/train
   val:   datasets/melanoma/val
-  test:  datasets/melanoma/test
+  test:  dataset/melanoma_cancer_dataset/test
 
 num_classes: 2
 class_names: [benign, malignant]

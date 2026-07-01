@@ -20,19 +20,6 @@ Run the smoke test before submitting changes:
 python scripts/run_smoke_test.py
 ```
 
-## Anonymity Requirements
-
-Until the review period concludes, contributors must ensure:
-
-1. No author names in commit messages or comments
-2. No institutional email addresses
-3. No identifying file paths (use `<REDACTED>` placeholders if needed)
-4. No usernames in any file
-5. Use anonymous Git configuration when committing:
-   ```bash
-   git config user.name "Anonymous"
-   git config user.email "anonymous@example.com"
-   ```
 
 ## Pull Request Process
 

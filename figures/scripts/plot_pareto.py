@@ -1,129 +1,87 @@
-#!/usr/bin/env python
-"""
-plot_pareto.py — Figure 2 of the ENAS paper.
-
-Scatter plot of TFLite INT8 accuracy versus search time per configuration.
-Shows all 212 cells (53 feasible × 2 methods × 2 datasets) on the
-accuracy–search-time plane with log-scale X axis.
-
-ENAS clusters at lower search times; NanoNAS spans a wider accuracy range
-extending to higher search time. Cross-dataset stratification is visible:
-Melanoma at the top (~89%), VWW at the bottom (~73%).
-
-Usage:
-    python figures/scripts/plot_pareto.py
-"""
-
+#!/usr/bin/env python3
+"""Regenerate the accuracy vs. search-time Pareto scatter (paper Fig. 3) from the
+parsed result CSVs, with the legend inside the top-right corner."""
 import argparse
-import sys
 from pathlib import Path
+import numpy as np, pandas as pd
+import matplotlib as mpl, matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
+# ---- style to match the paper ----
+mpl.rcParams.update({
+    "font.family": "serif",
+    "font.size": 11,
+    "axes.linewidth": 1,
+    "mathtext.fontset": "cm",
+})
+C_NANO = "#2f4b52"   # dark teal  (NanoNAS)
+C_ENAS = "#4bb3a4"   # teal       (ENAS)
+C_GREY = "#9aa0a3"   # neutral for the VWW/Cancer style keys
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(REPO_ROOT / "figures" / "scripts"))
+def parse_time(s):
+    s = str(s).strip()
+    if s in ("", "nan"): return np.nan
+    if ":" in s:
+        h, m, rest = s.split(":"); return int(h)*60 + int(m) + float(rest)/60
+    try: return float(s)
+    except ValueError: return np.nan
 
-from style import apply_paper_style, COLOURS
+def load(path):
+    d = pd.read_csv(path)
+    d = d[d["Status"].astype(str).str.upper() == "COMPLETED"].copy()
+    d["acc"]   = pd.to_numeric(d["TFLite Test Acc"], errors="coerce") * 100
+    d["stime"] = d["Search Time"].map(parse_time)
+    return d.dropna(subset=["acc", "stime"])
 
-DEFAULT_INPUT  = REPO_ROOT / "results" / "parsed_csv"
-DEFAULT_OUTPUT = REPO_ROOT / "figures" / "output" / "pareto_accuracy_vs_searchtime.pdf"
-
-
-def parse_time_to_minutes(t):
-    if pd.isna(t) or not isinstance(t, str):
-        return np.nan
-    try:
-        parts = t.split(":")
-        if len(parts) == 3:
-            return float(parts[0]) * 60 + float(parts[1]) + float(parts[2]) / 60
-        elif len(parts) == 2:
-            return float(parts[0]) + float(parts[1]) / 60
-    except Exception:
-        return np.nan
-    return np.nan
-
+def scatter(ax, d, color, marker, outlined):
+    ax.scatter(d["stime"], d["acc"], s=34, marker=marker,
+               facecolors=color,
+               edgecolors=("#20343a" if outlined else "none"),
+               linewidths=(0.7 if outlined else 0.0),
+               alpha=(0.9 if outlined else 0.55), zorder=3)
 
 def main():
-    p = argparse.ArgumentParser(description="Generate Figure 2 (Pareto plot).")
-    p.add_argument("--input",  default=str(DEFAULT_INPUT))
-    p.add_argument("--output", default=str(DEFAULT_OUTPUT))
-    args = p.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--csv-dir", default="results/parsed_csv")
+    ap.add_argument("--out", default="fig4_pareto1.pdf")
+    a = ap.parse_args()
+    d = Path(a.csv_dir)
+    Nv, Ev = load(d/"nanonas_vww_summary.csv"),    load(d/"enas_vww_summary.csv")
+    Nc, Ec = load(d/"nanonas_cancer_summary.csv"), load(d/"enas_cancer_summary.csv")
 
-    apply_paper_style()
-    in_dir = Path(args.input)
-
-    files = {
-        ("enas",    "vww"):     "enas_vww_summary.csv",
-        ("nanonas", "vww"):     "nanonas_vww_summary.csv",
-        ("enas",    "melanoma"):"enas_melanoma_summary.csv",
-        ("nanonas", "melanoma"):"nanonas_melanoma_summary.csv",
-    }
-
-    fig, ax = plt.subplots(figsize=(7, 5))
-
-    style_map = {
-        ("nanonas", "vww"):      dict(marker='o', s=42, c=COLOURS["nanonas"],
-                                       label="NanoNAS — VWW",
-                                       edgecolor='none'),
-        ("enas",    "vww"):      dict(marker='s', s=42, c=COLOURS["enas"],
-                                       label="ENAS — VWW",
-                                       edgecolor='none'),
-        ("nanonas", "melanoma"): dict(marker='o', s=42,
-                                       c='none', edgecolor=COLOURS["nanonas"],
-                                       linewidths=1.2,
-                                       label="NanoNAS — Melanoma"),
-        ("enas",    "melanoma"): dict(marker='s', s=42,
-                                       c='none', edgecolor=COLOURS["enas"],
-                                       linewidths=1.2,
-                                       label="ENAS — Melanoma"),
-    }
-
-    total_points = 0
-    for (method, dataset), fname in files.items():
-        fp = in_dir / fname
-        if not fp.exists():
-            print(f"[WARN] {fp} not found; skipping.")
-            continue
-        df = pd.read_csv(fp)
-        df = df[df["status"] == "COMPLETED"].copy()
-        if df.empty:
-            continue
-        df["search_min"] = df["search_time"].apply(parse_time_to_minutes)
-        df["acc_pct"]    = df["tflite_test_acc"] * 100
-
-        valid = df.dropna(subset=["search_min", "acc_pct"])
-        ax.scatter(
-            valid["search_min"], valid["acc_pct"],
-            **style_map[(method, dataset)],
-            alpha=0.7, zorder=3,
-        )
-        total_points += len(valid)
-
+    fig, ax = plt.subplots(figsize=(6, 5))
     ax.set_xscale("log")
-    ax.set_xlabel("Search time per configuration (min, log scale)", fontsize=10)
-    ax.set_ylabel("TFLite INT8 test accuracy (%)", fontsize=10)
-    ax.set_title(f"Accuracy vs. Search Time — All {total_points} Cells",
-                 fontsize=11, fontweight='bold')
-    ax.set_ylim(60, 95)
-    ax.grid(True, which='both', linestyle='-', linewidth=0.5,
-            color='#E8E8E8', zorder=1)
-    ax.legend(loc='lower right', fontsize=8, framealpha=0.9)
+    # VWW = solid (no edge); Cancer = outlined
+    scatter(ax, Nv, C_NANO, "o", outlined=False)
+    scatter(ax, Ev, C_ENAS, "s", outlined=False)
+    scatter(ax, Nc, C_NANO, "o", outlined=True)
+    scatter(ax, Ec, C_ENAS, "s", outlined=True)
 
-    # Annotate dataset clusters
-    ax.annotate("Melanoma (~89%)",  xy=(20, 88), xytext=(50, 91),
-                fontsize=8, color='gray', alpha=0.7,
-                ha='center')
-    ax.annotate("VWW (~73%)", xy=(20, 73), xytext=(50, 67),
-                fontsize=8, color='gray', alpha=0.7,
-                ha='center')
+    ax.set_xlabel("Search time per configuration (min, log)")
+    ax.set_ylabel("TFLite INT8 accuracy (\\%)")
+    ax.grid(True, which="both", ls=":", lw=0.6, color="0.8", zorder=0)
+    ax.set_axisbelow(True)
+    ax.set_xlim(1.8, 400)
+    ax.set_ylim(64, 92)
 
-    out_path = Path(args.output)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=300, bbox_inches='tight')
-    print(f"✔ Figure 2 written to: {out_path}")
+    handles = [
+        Line2D([0],[0], marker="o", color="none", markerfacecolor=C_NANO,
+               markeredgecolor="none", markersize=8, label="NanoNAS"),
+        Line2D([0],[0], marker="s", color="none", markerfacecolor=C_ENAS,
+               markeredgecolor="none", markersize=8, label="ENAS"),
+        Line2D([0],[0], marker="o", color="none", markerfacecolor=C_GREY,
+               markeredgecolor="none", markersize=8, label="VWW (solid)"),
+        Line2D([0],[0], marker="o", color="none", markerfacecolor=C_GREY,
+               markeredgecolor="#20343a", markeredgewidth=0.9, markersize=8,
+               label="Cancer (outlined)"),
+    ]
+    ax.legend(handles=handles, loc="upper right", frameon=True, framealpha=0.95,
+              edgecolor="0.7", fancybox=False, borderpad=0.5, handletextpad=0.4,
+              labelspacing=0.3, fontsize=9)
 
+    fig.tight_layout()
+    fig.savefig(a.out, bbox_inches="tight")
+    print("wrote", a.out)
 
 if __name__ == "__main__":
     main()

@@ -35,7 +35,4 @@ export TF_CUDNN_DETERMINISTIC=1
 ## Validation
 
 The analytical RAM/Flash/MACC estimators have been validated against
-stm32tflm ground-truth measurements. Mean absolute error:
-- RAM:   < 8 %
-- Flash: < 5 %
-- MACC:  < 2 %
+stm32tflm ground-truth measurements. The analytical estimators are a FEASIBILITY SCREEN only: the RAM estimate over-predicts peak RAM by ~3x (conservative, safe) and the Flash estimate under-predicts measured Flash by ~6.5x (loose lower bound). All footprint numbers in the paper (Table 3) are MEASURED with stm32tflm, not analytical.

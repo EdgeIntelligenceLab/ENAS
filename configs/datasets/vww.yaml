@@ -3,10 +3,10 @@ name: vww
 
 # ── Paths (relative to repository root; override via CLI if needed) ───────
 paths:
-  train: datasets/vww/train
-  val:   datasets/vww/val
-  test:  datasets/vww/test
-  raw_coco: datasets/coco/                # used by generate_vww_dataset.py
+  train: dataset/vww_dataset/train
+  val:   dataset/vww_dataset/val
+  test:  dataset/vww_dataset/test
+  raw_coco: dataset/coco/                # used by generate_vww_dataset.py
 
 # ── Dataset properties ────────────────────────────────────────────────────
 num_classes: 2

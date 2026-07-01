@@ -2,7 +2,15 @@
 Analytical hardware estimators for ENAS v2.1.
 
 These functions replace TFLite + stm32tflm during the search phase,
-providing ~50× speedup with <8% mean absolute error vs ground truth.
+providing a large speedup during search. IMPORTANT: these analytical
+estimates are used ONLY for pre-flight feasibility screening, not as
+accurate footprint predictions. Validated against stm32tflm ground truth,
+the RAM estimate is conservative (over-predicts peak RAM by ~3x) and the
+Flash estimate is a loose lower bound (under-predicts measured Flash by
+~6.5x). Feasibility decisions remain safe because the binding MCU
+constraint is peak RAM and the RAM estimate errs on the conservative side.
+All resource numbers reported in the paper (Table 3) are MEASURED with
+stm32tflm, not these analytical estimates.
 """
 
 import numpy as np

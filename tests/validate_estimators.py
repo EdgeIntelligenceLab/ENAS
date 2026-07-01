@@ -5,7 +5,7 @@ validate_estimators.py
 Validate analytical RAM/Flash/MACC estimators against stm32tflm
 ground-truth measurements.
 
-Per the paper, mean absolute error should be:
+Per the paper, the analytical estimator is a feasibility screen only; see Table 3 for MEASURED footprints.
     - RAM:   < 8 %
     - Flash: < 5 %
     - MACC:  < 2 %
@@ -143,9 +143,9 @@ def main():
     if ground_truth_available and ram_errors:
         print("\n── Validation summary ──")
         print(f"  RAM   mean |error|:  {np.mean(ram_errors):.2f}%   "
-              f"(target: <8%)")
+              f"(note: RAM over-predicts ~3x; analytical screen only)")
         print(f"  Flash mean |error|:  {np.mean(flash_errors):.2f}%   "
-              f"(target: <5%)")
+              f"(note: Flash under-predicts ~6.5x; use measured stm32tflm for footprints)")
         print(f"  Samples validated: {len(ram_errors)}")
     else:
         print("\n✔ Self-consistency check complete (no ground truth available).")

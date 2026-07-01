@@ -24,9 +24,9 @@ setup(
     ),
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author="Anonymous",
-    author_email="anonymous@example.com",
-    url="<anonymous-for-review>",
+    author="Mohd Moin Khan, Naman Srivastava, Pandarasamy Arjunan",
+    author_email="moinkhanmohd@iisc.ac.in",
+    url="https://github.com/EdgeIntelligenceLab/ENAS",
     license="MIT",
     packages=find_packages(
         exclude=["tests", "tests.*", "notebooks", "datasets", "figures"]

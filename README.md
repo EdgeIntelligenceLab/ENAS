@@ -1,444 +1,231 @@
 # ENAS — Efficient Hardware-Aware Neural Architecture Search for TinyML
 
-> **Anonymous repository for double-blind review at SuRE @ IJCAI 2026.**
-> All identifying information has been removed.
-> This repository accompanies the paper *"ENAS: An Efficient Hardware-Aware Neural Architecture Search Framework for TinyML on Resource-Constrained Microcontrollers"*.
-
-> 📎 Alternative anonymous mirror: <https://anonymous.4open.science/r/ENAS-F882/>
-
----
-
-## Table of Contents
-
-- [Overview](#overview)
-- [TinyML Motivation](#tinyml-motivation)
-- [ENAS Framework Summary](#enas-framework-summary)
-- [Supported Hardware](#supported-hardware)
-- [Datasets](#datasets)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Reproducing Experiments](#reproducing-experiments)
-- [Reproducing Figures and Tables](#reproducing-figures-and-tables)
-- [Repository Structure](#repository-structure)
-- [Reproducibility Notes](#reproducibility-notes)
+This repository accompanies the paper
+**"ENAS: An Efficient Hardware-Aware Neural Architecture Search Framework for TinyML on Resource-Constrained Microcontrollers"**,
+Mohd Moin Khan, Naman Srivastava, and Pandarasamy Arjunan
+(Edge Intelligence Lab, Indian Institute of Science, Bengaluru),
+SuRE Workshop @ IJCAI 2026.
 
 ---
 
 ## Overview
 
-We present **ENAS**, a hardware-aware Neural Architecture Search framework that combines:
+**ENAS** is a CPU-only hardware-aware Neural Architecture Search framework that combines:
 
-1. **Static analytical feasibility check** — eliminates expensive late-stage TFLite conversion during candidate evaluation
-2. **Cell-based search space** — supports standard, depthwise-separable, and bottleneck blocks with optional skip connections
-3. **Three-stage hybrid search** — random → top-K → mutation, with persistent cross-run caching
-4. **CPU-only operation** — no GPU acceleration required, suitable for resource-constrained development environments
+1. **Static analytical feasibility check** — replaces NanoNAS's *measured* per-candidate TFLite/stm32tflm check with an *analytical* pre-flight screen (Eq. 3).
+2. **Cell-based search space** — standard, depthwise-separable, and bottleneck blocks with optional skip connections, stride control, and `relu`/`relu6`.
+3. **Three-stage hybrid search** — random → top-K → mutation, with persistent cross-run caching.
+4. **CPU-only operation** — no GPU required.
 
-### Headline Results (from the paper)
+### Headline results (from the paper)
 
-- **2.41× mean search-time speedup** on Visual Wake Words
-- **1.70× mean search-time speedup** on Melanoma Cancer
-- **79.4% TFLite INT8 accuracy** on STM32H743ZI @ 80×80 (best result; +10.6 pp over NanoNAS)
-- **636 fully trained models** across 8 MCUs × 9 input resolutions × 3 runs × 2 methods × 2 datasets
-- **Zero deployment pipeline failures**
-- **~297 CPU-hours** total compute (no GPU)
+- **2.41× / 1.70× mean search-time speedup** on Visual Wake Words / Melanoma Cancer (both highly significant, Wilcoxon *p* < 10⁻⁸).
+- **Accuracy cost is small**: −0.79 pp (VWW, *not* statistically significant, *p* = 0.118) and −1.31 pp (Cancer).
+- **Measured resource trade-off** (Table 3): ENAS-selected models use **~0.38× the peak activation RAM** of NanoNAS at matched accuracy — the binding MCU constraint — in exchange for higher Flash and MACC.
+- **79.4% TFLite INT8 accuracy** on STM32H743ZI @ 80×80 (best result).
+- **636 fully trained models**, **zero deployment-pipeline failures**, **~297 CPU-hours** total (no GPU).
 
----
-
-## TinyML Motivation
-
-Deploying deep neural networks on microcontrollers requires models that simultaneously satisfy three hardware constraints:
-
-- **RAM** — peak inference memory (typically 20 KB – 1 MB)
-- **Flash** — model weight storage (64 KB – 2 MB)
-- **MACC** — multiply-accumulate operations per inference (0.75 M – 15 M)
-
-Recent TinyML NAS frameworks such as MCUNet and MicroNAS achieve strong accuracy but require substantial GPU resources (~300 GPU-hours for MCUNet on a single VWW search). CPU-only baselines such as NanoNAS improve accessibility but suffer from three limitations:
-
-| Limitation | Impact |
-|---|---|
-| **L1 — Search-time bottleneck** | Repeated TFLite conversion consumes 60–76% of total runtime |
-| **L2 — Narrow search space** | The 2-D (k, c) parameterisation excludes depthwise-separable, bottleneck, skip connections, stride control |
-| **L3 — Greedy instability** | Per-board accuracy varies by up to 13 pp between runs on STM32H743 @ 96×96 |
-
-ENAS addresses all three limitations while remaining CPU-only.
+> **Reproducibility at a glance.** The parsed result CSVs for all 636 runs are shipped in
+> [`results/parsed_csv/`](results/parsed_csv). You can regenerate the paper's main tables
+> (mean ± std and significance) in seconds, without re-running the sweep:
+> ```bash
+> python scripts/build_camera_ready_tables.py
+> ```
 
 ---
 
-## ENAS Framework Summary
+## ENAS framework summary
 
-### Pipeline (4 phases)
+### Cell-based search space
 
 ```
-┌──────────┐   ┌──────────────────────────┐   ┌──────────┐   ┌──────────┐
-│ Phase 0  │   │ Phase 1: 3-Stage Search  │   │ Phase 2  │   │ Phase 3  │
-│Feasibility│ → │ Random → Top-K → Mutate │ → │   Full   │ → │ INT8 PTQ │
-│ (Eq. 3)  │   │  30  →  8(K)   → 40     │   │ Training │   │  + Eval  │
-└──────────┘   └──────────────────────────┘   └──────────┘   └──────────┘
+A = (k, [c1, c2, …, cn])
 ```
 
-### Cell-Based Search Space
+where **`k ∈ {1, …, 16}`** is the stem filter count and **`n ∈ {1, …, 6}`** is the number of cells.
+During search, Stage-1 random sampling draws `k ≤ 12`; Stage-3 mutation samples `k` from the full
+`{1, …, 16}` range, so realised architectures span `k ∈ {1, …, 16}` (selected values in our runs
+range from 1 to 16). Each cell `ci = (b, k, s, g, a, e)`:
 
-Each architecture is described by:
-```
-A = (k, [c₁, c₂, …, cₙ])
-```
-where `k ∈ [1, 12]` is the stem filter count, `n ∈ [1, 5]` is the number of cells, and each cell `cᵢ = (b, k, s, g, a, e)` has six parameters:
+| Parameter        | Values                                    | Role                        |
+| ---------------- | ----------------------------------------- | --------------------------- |
+| `b` (block type) | standard, depthwise-separable, bottleneck | primitive                   |
+| `k` (kernel)     | 3, 5                                      | spatial kernel              |
+| `s` (stride)     | 1, 2                                      | replaces explicit pooling   |
+| `g` (skip)       | true, false                               | residual shortcut           |
+| `a` (activation) | relu, relu6                               | INT8-friendly choice        |
+| `e` (expansion)  | 1, 2                                      | bottleneck width multiplier |
 
-| Parameter | Values | Role |
-|---|---|---|
-| `b` (block type) | standard, depthwise-separable, bottleneck | |
-| `k` (kernel) | 3, 5 | spatial kernel |
-| `s` (stride) | 1, 2 | replaces explicit pooling |
-| `g` (skip) | true, false | residual shortcut |
-| `a` (activation) | relu, relu6 | INT8-friendly choice |
-| `e` (expansion) | 1, 2 | bottleneck width multiplier |
+Per-cell channel counts are **not searched independently**; they are derived from the stem width `k`
+via a fixed decaying-multiplier schedule. After fixing this schedule, the structural search space is
+on the order of **~10⁴ configurations**, made tractable by the hybrid search.
 
-**Total search space: ~5 × 10¹¹ candidate architectures.**
-
-### Scoring Function (Paper Eq. 6)
+### Scoring function (paper Eq. 6)
 
 ```
 s = w_acc · v_acc
-  + w_eff · (1 - cube_root(r/R_max · f/F_max · m/M_max))
-  + w_hr  · h
+  + w_eff · (1 − cube_root(r/R_max · f/F_max · m/M_max))
+  + w_hr  · h          # h = 1 iff all three ratios ≤ 0.8, else 0
 ```
 
-with `h = 1` if all three ratios ≤ 0.8, else 0.
+Calibrated values: `(w_acc, w_eff, w_hr) = (0.80, 0.15, 0.05)`, `E_p = 3` proxy epochs on
+**30% of training data** (`proxy_data_fraction = 0.30`). Raising `E_p` from 1 to 3 lifts the
+proxy/final-accuracy Spearman correlation from ρ = 0.18 (n.s.) to ρ = 0.71 (*p* < 0.001).
 
-Calibrated values from the paper: `(w_acc, w_eff, w_hr) = (0.80, 0.15, 0.05)` with `E_p = 3` proxy epochs on 20% of training data.
+### Important note on the analytical estimators
 
-### Calibration Result (Paper Table 1)
-
-| Proxy configuration | Mean NAS acc. | Rank correlation ρ |
-|---|:---:|:---:|
-| E_p=1, 20% data | 60.4% | 0.18 (not significant) |
-| + E_p=3 | 65.2% | 0.59 (p<.05) |
-| **E_p=3 + w_acc=0.80** | **65.2%** | **0.71 (p<.001)** |
-| + 30% data (probe) | 66.8% | 0.74 (p<.001) |
-
-Raising proxy epochs from 1 to 3 is the dominant calibration fix.
+The analytical RAM/Flash/MACC estimators (`enas/estimators.py`, Eq. 3) are used **only for
+pre-flight feasibility screening**, not as accurate footprint predictions. Validated against
+`stm32tflm` ground truth, the **RAM estimate is conservative (over-predicts ~3×)** and the **Flash
+estimate is a loose lower bound (under-predicts ~6.5×)**. This is safe because the binding MCU
+constraint is peak RAM and the RAM estimate errs conservatively. **All resource numbers reported in
+the paper (Table 3) are measured with `stm32tflm`, not analytical.**
 
 ---
 
-## Supported Hardware
+## Supported hardware
 
-The paper evaluates on 8 MCU platforms spanning three resource tiers (Table 2 in the paper):
+| Platform             | RAM    | Flash  | MACC   | Tier              |
+| -------------------- | ------ | ------ | ------ | ----------------- |
+| STM32L010RBT6        | 20 KB  | 128 KB | 0.75 M | Ultra-constrained |
+| NUCLEO-L010RB        | 20 KB  | 64 KB  | 0.75 M | Ultra-constrained |
+| Arduino Nano 33 IoT  | 32 KB  | 256 KB | 1.20 M | Constrained       |
+| NUCLEO-L412KB        | 64 KB  | 128 KB | 3.20 M | Moderate          |
+| Raspberry Pi Pico    | 264 KB | 2 MB   | 3.00 M | Moderate          |
+| Arduino Nano 33 BLE  | 256 KB | 1 MB   | 4.00 M | Capable           |
+| Arduino Nicla Vision | 1 MB   | 2 MB   | 8.00 M | High-capability   |
+| STM32H743ZI          | 1 MB   | 2 MB   | 15.0 M | High-capability   |
 
-| Platform | RAM | Flash | MACC | Tier |
-|---|:---:|:---:|:---:|:---:|
-| STM32L010RBT6 | 20 KB | 128 KB | 0.75 M | Ultra-constrained |
-| NUCLEO-L010RB | 20 KB | 64 KB | 0.75 M | Ultra-constrained |
-| Arduino Nano 33 IoT | 32 KB | 256 KB | 1.20 M | Constrained |
-| NUCLEO-L412KB | 64 KB | 128 KB | 3.20 M | Moderate |
-| Raspberry Pi Pico | 264 KB | 2 MB | 3.00 M | Moderate |
-| Arduino Nano 33 BLE | 256 KB | 1 MB | 4.00 M | Capable |
-| Arduino Nicla Vision | 1 MB | 2 MB | 8.00 M | High-capability |
-| STM32H743ZI | 1 MB | 2 MB | 15.0 M | High-capability |
-
-Configuration files: `configs/hardware/*.yaml`. Of 8 × 9 = 72 (hardware, resolution) cells, **53 are feasible** and 19 are correctly rejected by the Phase-0 analytical check (Eq. 3).
-
-Additional platforms (Raspberry Pi 5, Jetson Nano) are included for optional transfer evaluation but are not part of the main paper table.
+Of 8 × 9 = 72 (hardware, resolution) cells, **53 are feasible** and 19 are rejected by the Phase-0
+analytical check. Config files: `configs/hardware/*.yaml`.
 
 ---
 
 ## Datasets
 
-This repository supports the two TinyML benchmarks used in the paper:
-
-### Visual Wake Words (VWW)
-Binary classification (person / no person) derived from MS-COCO 2014. Baseline accuracy ~73% on the NanoNAS architecture family.
-
-Generate the dataset from raw COCO 2014:
-```bash
-python datasets/generate_vww_dataset.py \
-    --coco-root /path/to/coco \
-    --output datasets/vww/
-```
-
-### Melanoma Cancer
-Binary classification (benign / malignant) of dermoscopic images from the ISIC archive. Baseline accuracy ~89% (stronger class signal than VWW).
-
-Acquisition instructions in `datasets/README.md`. Configuration files: `configs/datasets/{vww,melanoma}.yaml`.
+- **Visual Wake Words (VWW)** — binary person/no-person from MS-COCO 2014. Generate with
+  `python dataset/generate_vww_dataset.py --coco-root /path/to/coco --output dataset/vww/`.
+- **Melanoma Cancer** — binary benign/malignant dermoscopic images (ISIC archive). See
+  `dataset/README.md`.
 
 ---
 
 ## Installation
 
-### Option 1 — pip
-
 ```bash
-git clone <anonymous-url>
-cd enas-tinyml
+git clone https://github.com/EdgeIntelligenceLab/ENAS.git
+cd ENAS
+# Option 1 — pip
 pip install -r requirements.txt
+# Option 2 — conda
+conda env create -f environment.yml && conda activate enas-tinyml
+# Option 3 — Docker
+docker build -t enas-tinyml . && docker run -it -v "$PWD":/workspace enas-tinyml
 ```
 
-### Option 2 — conda
-
-```bash
-conda env create -f environment.yml
-conda activate enas-tinyml
-```
-
-### Option 3 — Docker (recommended for review)
-
-```bash
-docker build -t enas-tinyml .
-docker run -it -v $PWD:/workspace enas-tinyml
-```
-
-### Verify installation
-
-```bash
-python -c "from enas import ENAS; print('ENAS installed successfully')"
-python scripts/run_smoke_test.py
-```
+Verify: `python scripts/run_smoke_test.py`
 
 ---
 
-## Quick Start
+## Reproducing the paper
 
-Single experiment on one hardware platform at one input size:
+### Step 0 — set up datasets (only needed for from-scratch runs)
+
+See [`dataset/README.md`](dataset/README.md) for full instructions: download COCO 2014 and run
+`dataset/generate_vww_dataset.py` + `dataset/create_test_dataset.py` for VWW, and download the
+Melanoma dataset from Kaggle. Path A below needs no datasets.
+
+### A) Regenerate tables from shipped results (seconds, recommended)
+
+The parsed CSVs for all 636 runs are in `results/parsed_csv/`. Regenerate the main tables:
 
 ```bash
-python scripts/run_single_experiment.py \
-    --hardware STM32H743ZI \
-    --size 80 \
-    --dataset vww \
-    --epochs 100
+python scripts/build_camera_ready_tables.py        # Tables 2, 3, 5 (+ significance)
 ```
 
-Expected outcome: TFLite INT8 accuracy ≈ 79% (matches paper's best result of 79.4%).
-
-Results written to `results/single_runs/enas_STM32H743ZI_size80_run1_<timestamp>/`.
-
----
-
-## Reproducing Experiments
-
-### Full paper reproduction (636 models, ~297 CPU-hours)
+### B) Re-run the full sweep from scratch (~297 CPU-hours)
 
 ```bash
-# VWW sweep: ENAS + NanoNAS
 python scripts/run_all_experiments.py --method enas    --dataset vww
 python scripts/run_all_experiments.py --method nanonas --dataset vww
-
-# Melanoma sweep: ENAS + NanoNAS
 python scripts/run_all_experiments.py --method enas    --dataset melanoma
 python scripts/run_all_experiments.py --method nanonas --dataset melanoma
+python scripts/parse_logs.py                       # raw logs -> results/parsed_csv/*.csv
 ```
 
-Each sweep covers 8 hardware × 9 input resolutions × 3 runs. The 19 infeasible cells are automatically skipped by the Phase-0 check.
+### C) Measured resource footprints (Table 3)
 
-Estimated wall-clock time on a 16-core CPU server: **5–7 days** total. We recommend running each (dataset, method) pair on a separate node.
-
-### Selective reproduction
-
-```bash
-# Single hardware, all sizes:
-python scripts/run_all_experiments.py --hardware STM32H743ZI --dataset vww
-
-# All hardware, single size (e.g., to reproduce paper Table 4):
-python scripts/run_all_experiments.py --size 50 --dataset vww
-python scripts/run_all_experiments.py --size 64 --dataset vww
-
-# Reproduce best result (STM32H743 @ 80×80):
-python scripts/run_single_experiment.py --hardware STM32H743ZI --size 80
-```
-
-### Ablation experiments (Paper Table 7)
-
-```bash
-python scripts/run_ablation.py --config configs/experiments/ablation.yaml
-```
-
-### Parsing logs into CSV summaries
-
-After experiments complete:
-
-```bash
-python scripts/parse_logs.py
-python scripts/generate_summary_tables.py
-```
-
-This produces `results/parsed_csv/*.csv` and `results/summary_tables/*.csv`.
+`stm32tflm` measurements of the selected models are in
+`results/parsed_csv/enas_measured_resources.csv`. To regenerate from saved `.tflite` files use the
+batch measurement script and your local `stm32tflm` binary.
 
 ---
 
-## Reproducing Figures and Tables
+## Paper artifact mapping
 
-Regenerate every figure in the paper from parsed CSV results:
-
-```bash
-python figures/scripts/generate_all_figures.py
-```
-
-| Output File | Paper Reference | Generator Script |
-|---|---|---|
-| `pipeline_overview.pdf` | Figure 1 | `plot_pipeline.py` |
-| `pareto_accuracy_vs_searchtime.pdf` | Figure 2 | `plot_pareto.py` |
-| `heatmap_4panel.pdf` | Figure 3 | `plot_heatmaps.py` |
-| `table_proxy_fidelity.tex` | Table 1 | `generate_summary_tables.py` |
-| `table_hardware_platforms.tex` | Table 2 | `generate_summary_tables.py` |
-| `table_aggregate_results.tex` | Table 3 | `generate_summary_tables.py` |
-| `table_focused_50_64.tex` | Table 4 | `generate_summary_tables.py` |
-| `table_per_resolution.tex` | Table 5 | `generate_summary_tables.py` |
-| `table_per_hardware.tex` | Table 6 | `generate_summary_tables.py` |
-| `table_ablation.tex` | Table 7 | `generate_summary_tables.py` |
-
-Individual figure regeneration:
-
-```bash
-python figures/scripts/plot_heatmaps.py    # Figure 3 (4-panel)
-python figures/scripts/plot_pareto.py      # Figure 2
-```
-
-### Heatmap colour scheme (Figure 3)
-
-The 4-panel heatmap in Figure 3 uses a diverging green-red colour scale:
-- **Green cells** — ENAS performs better/faster than NanoNAS
-- **Red cells** — NanoNAS performs better/faster than ENAS
-- **Grey hatched cells** — RAM-infeasible (rejected by Phase-0 analytical check)
+| Paper item | Description | Source |
+| --- | --- | --- |
+| Figure 1 | ENAS pipeline + architecture template | TikZ in paper |
+| Figure 2 | Analytical activation-memory feasibility boundary | `figures/scripts/plot_feasibility.py` |
+| Figure 3 | Accuracy vs. search-time Pareto (212 cells) | `figures/scripts/plot_pareto.py` |
+| Figure 4 | 4-panel per-cell Δ heatmaps (acc / search time) | `figures/scripts/plot_heatmaps.py` |
+| Table 1 | Target MCU platforms | `docs/hardware_specs.md` (static) |
+| Table 2 | Aggregate results + Wilcoxon significance | `scripts/build_camera_ready_tables.py` |
+| **Table 3** | **Measured resource footprint of selected models** | `scripts/build_camera_ready_tables.py` |
+| Table 4 | Focused 50×50 / 64×64 study (warm-seeded) | `scripts/build_camera_ready_tables.py` |
+| Table 5 | Per-resolution sweep | `scripts/build_camera_ready_tables.py` |
+| Table 6 | Per-hardware best (VWW) | `scripts/build_camera_ready_tables.py` |
+| Table 7 | Ablation of design/calibration choices | `scripts/run_ablation.py` |
 
 ---
 
-## Repository Structure
+## Repository structure
 
 ```
-enas-tinyml/
-├── README.md
-├── LICENSE                          (MIT)
-├── CONTRIBUTING.md
-├── .gitignore
-├── requirements.txt
-├── environment.yml
-├── Dockerfile
-├── setup.py
-│
-├── enas/                            # ENAS framework
-│   ├── enas_v2_1.py                 #   Main NAS class
-│   ├── search_space.py              #   Cell-based search space
-│   ├── blocks.py                    #   Block builders
-│   ├── estimators.py                #   Analytical RAM/Flash/MACC
-│   ├── scoring.py                   #   Multi-objective scoring (Eq. 6)
-│   ├── mutations.py                 #   Stage 3 mutation strategies
-│   └── quantization.py              #   INT8 PTQ utilities
-│
-├── nanonas/                         # NanoNAS baseline
-│   └── nanonas.py
-│
-├── enas_v1/                         # ENAS-strategy ablation (Paper §5.5)
-│   └── enas_v1.py
-│
-├── datasets/
-│   ├── vww_loader.py
-│   ├── melanoma_loader.py
-│   ├── generate_vww_dataset.py
-│   └── README.md
-│
-├── configs/
-│   ├── hardware/                    # YAML constraint files (8 MCUs + 2 SBC)
-│   ├── experiments/                 # ENAS/NanoNAS hyperparameter presets
-│   └── datasets/                    # VWW + Melanoma configs
-│
-├── scripts/                         # Top-level reproducibility scripts
-│   ├── run_single_experiment.py
-│   ├── run_all_experiments.py
-│   ├── run_ablation.py
-│   ├── parse_logs.py
-│   ├── generate_summary_tables.py
-│   └── run_smoke_test.py
-│
-├── results/                         # Outputs (mostly git-ignored)
-│   ├── raw_logs/
-│   ├── parsed_csv/
-│   ├── summary_tables/
-│   └── models/
-│
-├── figures/
-│   ├── output/                      # Generated PDFs
-│   └── scripts/                     # Plotting code
-│       ├── generate_all_figures.py
-│       ├── plot_pareto.py           # Figure 2
-│       ├── plot_heatmaps.py         # Figure 3 (4-panel)
-│       └── style.py
-│
-├── notebooks/                       # Analysis Jupyter notebooks
-├── paper/                           # Paper artifacts (PDF omitted for anonymity)
-├── tests/                           # Unit tests
-└── docs/                            # Extended documentation
+enas/            ENAS v2.1 framework (search space, blocks, estimators, scoring, mutations, PTQ)
+nanonas/         NanoNAS baseline
+enas_v1/         ENAS-strategy ablation variant (2-D (k,c) + random search)  [see note below]
+dataset/         Dataset generators and loaders
+configs/         Hardware / dataset / experiment YAML configs
+scripts/         Experiment runners, log parsing, table generation
+figures/         Plotting code and generated figures
+results/         parsed_csv/ ships the 636-run summaries; raw_logs/models are git-ignored
+tests/           Unit tests + estimator validation
+docs/            Extended documentation
 ```
+
+> **Note on `enas_v1/`.** The ENAS-strategy ablation (paper §5.5, Table 7) uses the 2-D `(k, c)`
+> space with parallel random search and the analytical pre-flight check. Ensure the runnable
+> implementation (`enas_v1/enas_v1.py`) is present before invoking `scripts/run_ablation.py`.
 
 ---
 
-## Reproducibility Notes
+## Reproducibility notes
 
-### Random seeds
-
-Documented per-run seeds: **11, 42, 137** for runs 1, 2, 3 respectively. All scripts accept `--seed` to override.
-
-### Hardware-in-the-loop validation
-
-The analytical RAM/Flash/MACC estimators (Eq. 3 and `enas/estimators.py`) have been validated against `stm32tflm` ground-truth measurements. Mean absolute error: <8% RAM, <5% Flash, <2% MACC. Validation:
-```bash
-python tests/validate_estimators.py --samples 50
-```
-
-### Determinism
-
-Floating-point summation order in TensorFlow makes runs only approximately reproducible. To approximate determinism:
-```bash
-export TF_DETERMINISTIC_OPS=1
-export TF_CUDNN_DETERMINISTIC=1
-```
-
-Inter-run variance of ±2–4 pp accuracy is expected (matches paper Table 3 reported std. of 2.58–3.33 pp).
-
-### Cross-experiment cache
-
-ENAS uses a persistent JSON cache at `results/raw_logs/<exp>/enas_v2_1_cache.json`. Force fresh evaluation:
-```bash
-python scripts/run_single_experiment.py --no-cache ...
-```
-
-### Compute requirements
-
-| Setup | Time | Use case |
-|---|---|---|
-| 1 CPU × 1 hw × 1 size × 1 run | 30–90 min | Spot-check |
-| 16-core CPU server, full sweep | 5–7 days | Full reproduction (~297 CPU-hours) |
-| 4 nodes × 16 cores in parallel | ~36 hours | Distributed reproduction |
-
-No GPU is required. All paper results were produced on CPU.
-
-### Known external dependencies
-
-- **TFLite Lite Converter** — bundled with TensorFlow 2.13
-- **stm32tflm binary** — required *only* for ground-truth hardware validation. Download from STMicroelectronics X-CUBE-AI Linux package (free registration) and place at repository root. The main ENAS pipeline uses the analytical estimator and does not require this binary during search.
+- **Seeds.** Dataset shuffling uses seed 11 (full training) and 42 (proxy split); pass `--seed` to override per run.
+- **Determinism.** TensorFlow float summation order makes runs only approximately reproducible; inter-run std of ±2–4 pp is expected and is reported as mean ± std in every results table.
+- **Cache.** ENAS uses a persistent JSON cache; pass `--no-cache` to force fresh evaluation.
+- **stm32tflm.** Needed only for measured RAM/Flash. Download from the STMicroelectronics X-CUBE-AI Linux package and place at the repo root.
 
 ---
 
 ## Citation
 
 ```bibtex
-@inproceedings{anonymous2026enas,
-  title  = {ENAS: An Efficient Hardware-Aware Neural Architecture Search Framework
-            for TinyML on Resource-Constrained Microcontrollers},
-  author = {Anonymous},
-  booktitle = {SuRE @ IJCAI},
-  year   = {2026},
-  note   = {Under double-blind review}
+@inproceedings{khan2026enas,
+  title     = {ENAS: An Efficient Hardware-Aware Neural Architecture Search Framework
+               for TinyML on Resource-Constrained Microcontrollers},
+  author    = {Khan, Mohd Moin and Srivastava, Naman and Arjunan, Pandarasamy},
+  booktitle = {Proceedings of the SuRE Workshop at IJCAI 2026},
+  year      = {2026},
+  publisher = {CEUR-WS.org}
 }
 ```
 
----
+## Acknowledgements
+
+ENAS builds on **NanoNAS** (Garavagno et al., MIT) — see [`NOTICE.md`](NOTICE.md). Please cite NanoNAS alongside ENAS when using the baseline.
 
 ## License
 
-Code: MIT (see [LICENSE](LICENSE))
-Datasets: VWW (CC BY 4.0 via COCO 2014 derivative), Melanoma (ISIC archive terms)
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). All contributions are paused during the anonymous review period.
+Code: MIT (see `LICENSE`). Datasets: VWW (CC BY 4.0 via COCO 2014 derivative); Melanoma (ISIC archive terms).
