@@ -1,0 +1,8 @@
+# STM32H743ZI — Cortex-M7 with FPU + DSP
+name:        STM32H743ZI
+ram_bytes:   1048576
+flash_bytes: 2097152
+macc_limit:  15000000
+tier:        high_capability
+family:      STM32H7
+clock_mhz:   480

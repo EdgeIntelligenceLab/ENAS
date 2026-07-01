@@ -1,0 +1,39 @@
+# ENAS v2.1 — Default experiment configuration
+# All hyperparameters reflect the finalised v2.1 values from the paper.
+
+method: ENAS_v2.1
+
+# ── Search configuration ──────────────────────────────────────────────────
+search:
+  strategy:             hybrid_3stage
+  n_random_stage:       30          # Stage 1 candidates
+  top_k_select:         8           # Stage 2 survivors
+  n_mutations_per_arch: 5           # Stage 3 mutants per survivor
+  proxy_epochs:         3           # Proxy training epochs (CRITICAL v2.1 fix)
+  proxy_data_fraction:  0.20        # Fraction of training data for proxy
+  parallel_workers:     2           # Concurrent proxy evaluations
+
+# ── Scoring weights ───────────────────────────────────────────────────────
+scoring:
+  accuracy_weight:    0.80          # v2.1: raised from 0.65
+  efficiency_weight:  0.15          # v2.1: lowered from 0.25
+  headroom_weight:    0.05          # v2.1: lowered from 0.10
+
+# ── Search space bounds ───────────────────────────────────────────────────
+search_space:
+  max_k:     12
+  max_cells: 5
+
+# ── Full training (Phase 2) ───────────────────────────────────────────────
+training:
+  epochs:        100
+  learning_rate: 0.01               # cosine decay applied automatically
+  batch_size:    128
+  early_stopping_patience: 15
+
+# ── Quantization (Phase 3) ────────────────────────────────────────────────
+quantization:
+  num_representative_samples: 150
+
+# ── Reproducibility ───────────────────────────────────────────────────────
+seeds: [11, 42, 137]                # used for runs 1, 2, 3 respectively

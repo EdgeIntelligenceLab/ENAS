@@ -1,0 +1,8 @@
+# Raspberry Pi 5 — Cortex-A76 SBC (transfer evaluation only)
+name:        RaspberryPi5
+ram_bytes:   8589934592
+flash_bytes: 34359738368
+macc_limit:  100000000
+tier:        edge_sbc
+family:      BCM2712
+clock_mhz:   2400

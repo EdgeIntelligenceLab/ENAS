@@ -1,0 +1,8 @@
+# Arduino Nano 33 IoT — SAMD21 Cortex-M0+
+name:        ArduinoNano33IoT
+ram_bytes:   32768
+flash_bytes: 262144
+macc_limit:  1200000
+tier:        constrained
+family:      SAMD21
+clock_mhz:   48
